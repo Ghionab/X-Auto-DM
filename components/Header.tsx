@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Bell, User, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { api, logout, User as ApiUser } from '@/lib/api';
 
 interface HeaderProps {
   title: string;
@@ -18,6 +20,23 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle }: HeaderProps) {
+  const [user, setUser] = useState<ApiUser | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const response = await api.getProfile();
+      if (response.success) {
+        setUser(response.data?.user || null);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+  };
+
   return (
     <div className="flex items-center justify-between p-6 border-b bg-white">
       <div>
@@ -39,18 +58,32 @@ export default function Header({ title, subtitle }: HeaderProps) {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
                 <User className="w-4 h-4 text-white" />
               </div>
-              <span className="hidden sm:block text-sm font-medium">John Doe</span>
+              <span className="hidden sm:block text-sm font-medium">
+                {user ? user.username : 'Loading...'}
+              </span>
               <ChevronDown className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              <div>
+                <div className="font-medium">{user?.username || 'User'}</div>
+                <div className="text-xs font-normal text-gray-500">{user?.email}</div>
+                {user?.is_premium && (
+                  <Badge variant="default" className="mt-1 text-xs">
+                    {user.subscription_plan || 'Premium'}
+                  </Badge>
+                )}
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Profile Settings</DropdownMenuItem>
             <DropdownMenuItem>Billing</DropdownMenuItem>
             <DropdownMenuItem>API Keys</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600">Sign Out</DropdownMenuItem>
+            <DropdownMenuItem className="text-red-600" onClick={handleLogout}>
+              Sign Out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
