@@ -117,47 +117,32 @@ class XOAuthService:
         Login to Twitter using twitterapi.io login endpoint
         """
         try:
-            headers = {
-                'X-API-Key': self.api_key,
-                'Content-Type': 'application/json'
+            # Import the new clean API
+            from x_api import connect_twitter_api_account, TwitterAPIError
+            
+            # Use the clean API function
+            login_cookie = connect_twitter_api_account(
+                username=username,
+                email=email,
+                password=password,
+                totp_secret=totp_secret,
+                proxy=proxy
+            )
+            
+            return True, {
+                'access_token': login_cookie,
+                'access_token_secret': username,  # Use username as identifier
+                'user_id': username,  # Use username as ID for now
+                'screen_name': username,
+                'login_cookie': login_cookie
             }
-            
-            # Use twitterapi.io login endpoint
-            login_url = f"{self.base_url}/twitter/user_login_v2"
-            
-            payload = {
-                'user_name': username,
-                'email': email,
-                'password': password,
-                'totp_secret': totp_secret or "",  # Ensure it's not None
-                'proxy': proxy or "http://user:pass@proxy.example.com:8080"  # Default proxy format
-            }
-            
-            response = requests.post(login_url, json=payload, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                data = response.json()
                 
-                if data.get('status') == 'success' and 'login_cookie' in data:
-                    return True, {
-                        'access_token': data['login_cookie'],
-                        'access_token_secret': username,  # Use username as identifier
-                        'user_id': username,  # Use username as ID for now
-                        'screen_name': username,
-                        'login_cookie': data['login_cookie']
-                    }
-                else:
-                    return False, {"error": data.get('msg', 'Login failed')}
-            else:
-                logger.error(f"Login failed: {response.status_code} - {response.text}")
-                return False, {"error": f"Login failed: {response.text}"}
-                
-        except requests.RequestException as e:
-            logger.error(f"Login error: {str(e)}")
-            return False, {"error": "Network error during login"}
+        except TwitterAPIError as e:
+            logger.error(f"Twitter API error: {str(e)}")
+            return False, {"error": str(e)}
         except Exception as e:
             logger.error(f"Unexpected error in login: {str(e)}")
-            return False, {"error": "Unexpected error during login"}
+            return False, {"error": f"Unexpected error: {str(e)}"}
 
     def handle_callback(self, oauth_token: str, oauth_verifier: str, 
                        oauth_token_secret: str) -> Tuple[bool, Dict]:
