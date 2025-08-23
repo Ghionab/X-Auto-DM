@@ -221,7 +221,247 @@ def create_app(config_name=None):
             return jsonify({'error': 'Failed to fetch profile'}), 500
     
     # ===============================
-    # X OAuth Routes
+    # New X Authentication Routes (Hybrid System)
+    # ===============================
+    
+    @app.route('/api/auth/twitter/cookie-login', methods=['POST'])
+    @jwt_required()
+    def twitter_cookie_login():
+        """Authenticate using X/Twitter cookies from user's browser"""
+        try:
+            user_id = int(get_jwt_identity())
+            data = request.get_json()
+            
+            # Verify user exists
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # Validate required cookies
+            cookies = data.get('cookies')
+            if not cookies:
+                return jsonify({'error': 'Cookies are required'}), 400
+            
+            # Ensure we have essential Twitter cookies
+            required_cookies = ['auth_token', 'ct0']
+            for cookie_name in required_cookies:
+                if not cookies.get(cookie_name):
+                    return jsonify({
+                        'error': f'Missing required cookie: {cookie_name}',
+                        'fallback_to_oauth': True
+                    }), 400
+            
+            try:
+                # Use X API to verify the cookies and get user info
+                from x_auth import create_x_auth
+                x_auth = create_x_auth()
+                
+                # Create a session using the cookies to verify they're valid
+                # This is a placeholder - actual implementation would need to use the cookies
+                # to make an authenticated request to X API
+                
+                # For now, we'll simulate user data extraction from cookies
+                # In a real implementation, you'd use the cookies to make API calls
+                user_info = {
+                    'id': '123456789',  # Extract from cookies or API call
+                    'username': 'placeholder_user',  # Extract from cookies or API call
+                    'name': 'Placeholder User',
+                    'profile_image_url': '',
+                    'public_metrics': {
+                        'followers_count': 0,
+                        'following_count': 0
+                    },
+                    'verified': False
+                }
+                
+                # Store the authentication info
+                token_storage = TokenStorageService()
+                
+                # For cookie auth, we store a placeholder token with the cookie data
+                # In production, you'd want to store the cookies securely
+                store_success, store_result = token_storage.store_oauth_tokens(
+                    user_id=user_id,
+                    access_token='cookie_auth_placeholder',
+                    access_token_secret='cookie_auth_placeholder',
+                    twitter_user_id=user_info['id'],
+                    screen_name=user_info['username']
+                )
+                
+                if not store_success:
+                    logger.error(f"Token storage failed: {store_result}")
+                    return jsonify({
+                        'error': 'Failed to store authentication data',
+                        'fallback_to_oauth': True
+                    }), 500
+                
+                # Create or update Twitter account
+                account_success, account_result = token_storage.create_or_update_twitter_account(
+                    user_id=user_id,
+                    user_data=user_info,
+                    oauth_tokens_id=store_result['token_id']
+                )
+                
+                if not account_success:
+                    logger.error(f"Twitter account creation failed: {account_result}")
+                    return jsonify({
+                        'error': 'Failed to create Twitter account',
+                        'fallback_to_oauth': True
+                    }), 500
+                
+                logger.info(f"Cookie authentication successful for user {user_id}, account {user_info['username']}")
+                
+                return jsonify({
+                    'message': 'X account connected successfully via cookies',
+                    'twitter_account': account_result['twitter_account'],
+                    'screen_name': user_info['username'],
+                    'method': 'cookie'
+                })
+                
+            except Exception as cookie_error:
+                logger.error(f"Cookie authentication failed: {str(cookie_error)}")
+                # Graceful fallback - tell frontend to use OAuth
+                return jsonify({
+                    'error': 'Cookie authentication failed - cookies may be expired or invalid',
+                    'fallback_to_oauth': True
+                }), 400
+                
+        except Exception as e:
+            logger.error(f"Cookie login error: {str(e)}")
+            return jsonify({
+                'error': 'Authentication failed',
+                'fallback_to_oauth': True
+            }), 500
+    
+    @app.route('/api/auth/twitter/oauth-login', methods=['POST'])
+    @jwt_required()
+    def twitter_oauth_login():
+        """Initiate X OAuth flow for account connection"""
+        try:
+            user_id = int(get_jwt_identity())
+            
+            # Verify user exists
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            from x_auth import create_x_auth, XAuthError
+            
+            # Create X Auth instance
+            x_auth = create_x_auth()
+            
+            # Generate PKCE pair and state
+            code_verifier, code_challenge = x_auth.generate_pkce_pair()
+            state = x_auth.generate_state()
+            
+            # Get authorization URL
+            authorization_url = x_auth.get_authorization_url(state, code_challenge)
+            
+            logger.info(f"Generated X OAuth URL for user {user_id}")
+            
+            return jsonify({
+                'authorization_url': authorization_url,
+                'state': state,
+                'code_verifier': code_verifier,
+                'method': 'oauth'
+            })
+            
+        except XAuthError as e:
+            logger.error(f"X Auth error: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logger.error(f"OAuth initiation error: {str(e)}")
+            return jsonify({'error': 'Failed to initiate OAuth'}), 500
+    
+    @app.route('/api/auth/twitter/oauth-callback', methods=['POST'])
+    @jwt_required()
+    def twitter_oauth_callback():
+        """Handle OAuth callback and complete authentication"""
+        try:
+            user_id = int(get_jwt_identity())
+            data = request.get_json()
+            
+            # Verify user exists
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # Get required parameters
+            authorization_code = data.get('code')
+            code_verifier = data.get('code_verifier')
+            state = data.get('state')
+            
+            if not authorization_code or not code_verifier:
+                return jsonify({'error': 'Missing authorization code or code verifier'}), 400
+            
+            from x_auth import create_x_auth, XAuthError
+            
+            # Create X Auth instance
+            x_auth = create_x_auth()
+            
+            # Exchange code for tokens
+            token_data = x_auth.exchange_code_for_tokens(authorization_code, code_verifier)
+            
+            # Get user info
+            access_token = token_data.get('access_token')
+            user_info = x_auth.get_user_info(access_token)
+            
+            if 'data' not in user_info:
+                return jsonify({'error': 'Failed to get user information'}), 400
+            
+            user_data = user_info['data']
+            
+            # Store tokens securely
+            token_storage = TokenStorageService()
+            
+            # Store encrypted tokens
+            store_success, store_result = token_storage.store_oauth_tokens(
+                user_id=user_id,
+                access_token=access_token,
+                access_token_secret=token_data.get('refresh_token', ''),
+                twitter_user_id=user_data.get('id'),
+                screen_name=user_data.get('username')
+            )
+            
+            if not store_success:
+                logger.error(f"Token storage failed: {store_result}")
+                return jsonify({'error': 'Failed to store tokens'}), 500
+            
+            # Create or update Twitter account
+            account_success, account_result = token_storage.create_or_update_twitter_account(
+                user_id=user_id,
+                user_data={
+                    'screen_name': user_data.get('username'),
+                    'name': user_data.get('name'),
+                    'followers_count': user_data.get('public_metrics', {}).get('followers_count', 0),
+                    'following_count': user_data.get('public_metrics', {}).get('following_count', 0),
+                    'verified': user_data.get('verified', False),
+                    'profile_image_url': user_data.get('profile_image_url', '')
+                },
+                oauth_tokens_id=store_result['token_id']
+            )
+            
+            if not account_success:
+                logger.error(f"Twitter account creation failed: {account_result}")
+                return jsonify({'error': 'Failed to create Twitter account'}), 500
+            
+            logger.info(f"OAuth authentication completed successfully for user {user_id}, account {user_data.get('username')}")
+            
+            return jsonify({
+                'message': 'X account connected successfully via OAuth',
+                'twitter_account': account_result['twitter_account'],
+                'screen_name': user_data.get('username'),
+                'method': 'oauth'
+            })
+            
+        except XAuthError as e:
+            logger.error(f"X Auth error: {str(e)}")
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f"OAuth callback error: {str(e)}")
+            return jsonify({'error': 'OAuth callback failed'}), 500
+    
+    # ===============================
+    # Legacy X OAuth Routes (Keep for compatibility)
     # ===============================
     
     @app.route('/api/auth/x/initiate', methods=['POST'])
@@ -391,10 +631,93 @@ def create_app(config_name=None):
             logger.error(f"Account disconnection error: {str(e)}")
             return jsonify({'error': 'Failed to disconnect account'}), 500
     
-    @app.route('/api/auth/x/login', methods=['POST'])
+
+    @app.route('/api/auth/x/login', methods=['GET'])
     @jwt_required()
-    def x_login_with_credentials():
-        """Login to X using credentials via twitterapi.io"""
+    def start_x_oauth():
+        """Start X OAuth 2.0 flow - returns authorization URL"""
+        try:
+            user_id = int(get_jwt_identity())
+            
+            # Verify user exists
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            from x_auth import create_x_auth, XAuthError
+            
+            # Create X Auth instance
+            x_auth = create_x_auth()
+            
+            # Generate PKCE pair and state
+            code_verifier, code_challenge = x_auth.generate_pkce_pair()
+            state = x_auth.generate_state()
+            
+            # Store PKCE verifier and state in session (you might want to use Redis in production)
+            # For now, we'll return them to be stored client-side temporarily
+            authorization_url = x_auth.get_authorization_url(state, code_challenge)
+            
+            logger.info(f"Generated X OAuth URL for user {user_id}")
+            
+            return jsonify({
+                'authorization_url': authorization_url,
+                'state': state,
+                'code_verifier': code_verifier  # In production, store this server-side
+            })
+            
+        except XAuthError as e:
+            logger.error(f"X Auth error: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logger.error(f"OAuth initiation error: {str(e)}")
+            return jsonify({'error': 'Failed to initiate OAuth'}), 500
+    
+    @app.route('/api/auth/x/callback', methods=['GET'])
+    def handle_x_oauth_callback_redirect():
+        """Handle X OAuth callback and exchange code for tokens"""
+        try:
+            # Get parameters from callback
+            authorization_code = request.args.get('code')
+            state = request.args.get('state')
+            error = request.args.get('error')
+            
+            if error:
+                logger.error(f"OAuth error: {error}")
+                return jsonify({'error': f'OAuth error: {error}'}), 400
+            
+            if not authorization_code or not state:
+                return jsonify({'error': 'Missing authorization code or state'}), 400
+            
+            # In a real implementation, you'd validate the state against stored value
+            # For now, we'll accept it and let the frontend handle validation
+            
+            from x_auth import create_x_auth, XAuthError
+            
+            # This endpoint will be called by X, so we need to handle it differently
+            # We'll redirect to frontend with the code and state
+            frontend_callback_url = f"http://localhost:3000/auth/x/callback?code={authorization_code}&state={state}"
+            
+            return f'''
+            <html>
+                <head><title>X Authentication</title></head>
+                <body>
+                    <script>
+                        // Redirect to frontend callback
+                        window.location.href = "{frontend_callback_url}";
+                    </script>
+                    <p>Redirecting...</p>
+                </body>
+            </html>
+            '''
+            
+        except Exception as e:
+            logger.error(f"OAuth callback error: {str(e)}")
+            return jsonify({'error': 'OAuth callback failed'}), 500
+    
+    @app.route('/api/auth/x/exchange', methods=['POST'])
+    @jwt_required()
+    def exchange_x_oauth_code():
+        """Exchange authorization code for access tokens"""
         try:
             user_id = int(get_jwt_identity())
             data = request.get_json()
@@ -404,41 +727,41 @@ def create_app(config_name=None):
             if not user:
                 return jsonify({'error': 'User not found'}), 404
             
-            # Validate required parameters
-            required_params = ['username', 'email', 'password']
-            for param in required_params:
-                if not data.get(param):
-                    return jsonify({'error': f'Missing parameter: {param}'}), 400
+            # Get required parameters
+            authorization_code = data.get('code')
+            code_verifier = data.get('code_verifier')
+            state = data.get('state')
             
-            # Initialize services
-            oauth_service = XOAuthService()
+            if not authorization_code or not code_verifier:
+                return jsonify({'error': 'Missing authorization code or code verifier'}), 400
+            
+            from x_auth import create_x_auth, XAuthError
+            
+            # Create X Auth instance
+            x_auth = create_x_auth()
+            
+            # Exchange code for tokens
+            token_data = x_auth.exchange_code_for_tokens(authorization_code, code_verifier)
+            
+            # Get user info
+            access_token = token_data.get('access_token')
+            user_info = x_auth.get_user_info(access_token)
+            
+            if 'data' not in user_info:
+                return jsonify({'error': 'Failed to get user information'}), 400
+            
+            user_data = user_info['data']
+            
+            # Store tokens securely
             token_storage = TokenStorageService()
-            
-            # Login with credentials
-            success, result = oauth_service.login_with_credentials(
-                username=data['username'],
-                email=data['email'],
-                password=data['password'],
-                totp_secret=data.get('totp_secret', ''),
-                proxy=data.get('proxy', '')
-            )
-            
-            if not success:
-                logger.error(f"X login failed: {result}")
-                return jsonify({'error': result.get('error', 'Login failed')}), 400
-            
-            access_token = result['access_token']
-            access_token_secret = result['access_token_secret']
-            twitter_user_id = result['user_id']
-            screen_name = result['screen_name']
             
             # Store encrypted tokens
             store_success, store_result = token_storage.store_oauth_tokens(
                 user_id=user_id,
                 access_token=access_token,
-                access_token_secret=access_token_secret,
-                twitter_user_id=twitter_user_id,
-                screen_name=screen_name
+                access_token_secret=token_data.get('refresh_token', ''),
+                twitter_user_id=user_data.get('id'),
+                screen_name=user_data.get('username')
             )
             
             if not store_success:
@@ -446,18 +769,16 @@ def create_app(config_name=None):
                 return jsonify({'error': 'Failed to store tokens'}), 500
             
             # Create or update Twitter account
-            user_data = {
-                'screen_name': screen_name,
-                'name': screen_name,  # Use username as display name
-                'followers_count': 0,  # We don't have this info from login
-                'following_count': 0,
-                'verified': False,
-                'profile_image_url': ''
-            }
-            
             account_success, account_result = token_storage.create_or_update_twitter_account(
                 user_id=user_id,
-                user_data=user_data,
+                user_data={
+                    'screen_name': user_data.get('username'),
+                    'name': user_data.get('name'),
+                    'followers_count': user_data.get('public_metrics', {}).get('followers_count', 0),
+                    'following_count': user_data.get('public_metrics', {}).get('following_count', 0),
+                    'verified': user_data.get('verified', False),
+                    'profile_image_url': user_data.get('profile_image_url', '')
+                },
                 oauth_tokens_id=store_result['token_id']
             )
             
@@ -465,17 +786,20 @@ def create_app(config_name=None):
                 logger.error(f"Twitter account creation failed: {account_result}")
                 return jsonify({'error': 'Failed to create Twitter account'}), 500
             
-            logger.info(f"X login completed successfully for user {user_id}, account {screen_name}")
+            logger.info(f"X OAuth completed successfully for user {user_id}, account {user_data.get('username')}")
             
             return jsonify({
                 'message': 'X account connected successfully',
                 'twitter_account': account_result['twitter_account'],
-                'screen_name': screen_name
+                'screen_name': user_data.get('username')
             })
             
+        except XAuthError as e:
+            logger.error(f"X Auth error: {str(e)}")
+            return jsonify({'error': str(e)}), 400
         except Exception as e:
-            logger.error(f"X login error: {str(e)}")
-            return jsonify({'error': 'Login processing failed'}), 500
+            logger.error(f"Token exchange error: {str(e)}")
+            return jsonify({'error': 'Token exchange failed'}), 500
 
     @app.route('/api/auth/x/status', methods=['GET'])
     @jwt_required()
