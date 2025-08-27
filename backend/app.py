@@ -467,36 +467,10 @@ def create_app(config_name=None):
     @app.route('/api/auth/x/initiate', methods=['POST'])
     @jwt_required()
     def initiate_x_oauth():
-        """Initiate X OAuth flow"""
-        try:
-            user_id = int(get_jwt_identity())
-            
-            # Verify user exists
-            user = User.query.get(user_id)
-            if not user:
-                return jsonify({'error': 'User not found'}), 404
-            
-            # Initialize OAuth service
-            oauth_service = XOAuthService()
-            
-            # Get request token and authorization URL
-            success, result = oauth_service.initiate_oauth()
-            
-            if success:
-                # Store request token temporarily (you might want to use Redis for this in production)
-                # For now, we'll return it to the frontend to pass back in the callback
-                return jsonify({
-                    'authorization_url': result['authorization_url'],
-                    'oauth_token': result['oauth_token'],
-                    'oauth_token_secret': result['oauth_token_secret']
-                })
-            else:
-                logger.error(f"OAuth initiation failed: {result}")
-                return jsonify({'error': result.get('error', 'Failed to initiate OAuth')}), 400
-                
-        except Exception as e:
-            logger.error(f"OAuth initiation error: {str(e)}")
-            return jsonify({'error': 'Failed to initiate OAuth'}), 500
+        """Legacy route disabled. Use official X OAuth 2.0 endpoints."""
+        return jsonify({
+            'error': 'Legacy OAuth route disabled. Use /api/auth/twitter/oauth-login and /api/auth/twitter/oauth-callback (PKCE) backed by x_auth.py'
+        }), 410
     
     @app.route('/api/auth/x/callback', methods=['POST'])
     @jwt_required()
@@ -1374,6 +1348,90 @@ def create_app(config_name=None):
             logger.error(f"Error fetching user DMs: {str(e)}")
             return jsonify({'error': 'Failed to fetch DMs'}), 500
     
+  
+# # -------------------------------
+# # X OFFICIAL AUTH ROUTES
+# # -------------------------------
+
+#     @app.route("/auth/x/start")
+#     def x_auth_start():
+#         try:
+#             x_auth = create_x_auth()
+#             code_verifier, code_challenge = x_auth.generate_pkce_pair()
+#             state = x_auth.generate_state()
+
+#             # Save to session (swap to DB if you prefer)
+#             session["x_code_verifier"] = code_verifier
+#             session["x_state"] = state
+
+#             # Redirect user to X OAuth page
+#             auth_url = x_auth.get_authorization_url(state, code_challenge)
+#             return redirect(auth_url)
+
+#         except XAuthError as e:
+#             logger.error(f"Auth start error: {str(e)}")
+#             return jsonify({"error": str(e)}), 400
+
+
+#     @app.route("/auth/x/callback")
+#     def x_auth_callback():
+#         try:
+#             x_auth = create_x_auth()
+#             code_verifier = session.get("x_code_verifier")
+#             expected_state = session.get("x_state")
+
+#             auth_code = request.args.get("code")
+#             state = request.args.get("state")
+
+#             if not auth_code or not state:
+#                 return jsonify({"error": "Missing code or state"}), 400
+
+#             if not x_auth.validate_state(state, expected_state):
+#                 return jsonify({"error": "Invalid state"}), 400
+
+#             tokens = x_auth.exchange_code_for_tokens(auth_code, code_verifier)
+#             session["x_tokens"] = tokens  # persist in DB for production
+
+#             return jsonify({
+#                 "message": "X account connected successfully",
+#                 "tokens": tokens
+#             })
+
+#         except XAuthError as e:
+#             logger.error(f"Callback error: {str(e)}")
+#             return jsonify({"error": str(e)}), 400
+
+
+#     @app.route("/auth/x/me")
+#     def x_auth_me():
+#         try:
+#             x_auth = create_x_auth()
+#             tokens = session.get("x_tokens")
+#             if not tokens or "access_token" not in tokens:
+#                 return jsonify({"error": "Not authenticated"}), 401
+
+#             user_data = x_auth.get_user_info(tokens["access_token"])
+#             return jsonify(user_data)
+
+#         except XAuthError as e:
+#             logger.error(f"User info error: {str(e)}")
+#             return jsonify({"error": str(e)}), 400
+
+
+#     @app.route("/auth/x/logout")
+#     def x_auth_logout():
+#         try:
+#             x_auth = create_x_auth()
+#             tokens = session.get("x_tokens")
+#             if tokens and "access_token" in tokens:
+#                 x_auth.revoke_token(tokens["access_token"])
+
+#             session.pop("x_tokens", None)
+#             return jsonify({"message": "Logged out from X"})
+#         except Exception as e:
+#             logger.error(f"Logout error: {str(e)}")
+#             return jsonify({"error": str(e)}), 400
+
     return app
 
 # Create the Flask app
