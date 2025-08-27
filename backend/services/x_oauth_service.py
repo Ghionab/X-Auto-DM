@@ -19,8 +19,14 @@ class XOAuthService:
     
     def __init__(self):
         self.api_key = os.environ.get('TWITTER_API_KEY') or current_app.config.get('TWITTER_API_KEY')
-        self.base_url = current_app.config.get('TWITTER_API_BASE_URL', 'https://api.twitterapi.io')
+        self.api_secret = os.environ.get('TWITTER_API_SECRET') or current_app.config.get('TWITTER_API_SECRET')
+        self.base_url = current_app.config.get('TWITTER_API_BASE_URL', 'https://api.twitter.com')
         self.callback_url = os.environ.get('X_OAUTH_CALLBACK_URL', 'http://localhost:3000/auth/x/callback')
+        
+        # Make sure we have required credentials
+        if not self.api_key or not self.api_secret:
+            logger.error("Missing Twitter API credentials. Please set TWITTER_API_KEY and TWITTER_API_SECRET")
+            raise ValueError("Missing Twitter API credentials")
         
         # Encryption key for token storage
         encryption_key = os.environ.get('TOKEN_ENCRYPTION_KEY')
@@ -59,7 +65,7 @@ class XOAuthService:
     
     def _generate_signature(self, base_string: str, token_secret: str = "") -> str:
         """Generate OAuth signature using HMAC-SHA1"""
-        signing_key = f"{self._percent_encode(self.consumer_secret)}&{self._percent_encode(token_secret)}"
+        signing_key = f"{self._percent_encode(self.api_secret)}&{self._percent_encode(token_secret)}"
         
         signature = hmac.new(
             signing_key.encode(),
@@ -144,6 +150,52 @@ class XOAuthService:
             logger.error(f"Unexpected error in login: {str(e)}")
             return False, {"error": f"Unexpected error: {str(e)}"}
 
+    def complete_oauth(self, oauth_token: str, oauth_verifier: str, oauth_token_secret: str) -> Tuple[bool, Dict]:
+        """Complete OAuth flow by exchanging request token for access token"""
+        try:
+            # Exchange the request token for an access token
+            access_token_url = f"{self.base_url}/oauth/access_token"
+            
+            oauth_params = {
+                'oauth_consumer_key': self.api_key,
+                'oauth_token': oauth_token,
+                'oauth_verifier': oauth_verifier,
+                'oauth_signature_method': 'HMAC-SHA1',
+                'oauth_timestamp': self._generate_timestamp(),
+                'oauth_nonce': self._generate_nonce(),
+                'oauth_version': '1.0'
+            }
+            
+            # Generate the signature
+            base_string = self._generate_signature_base_string('POST', access_token_url, oauth_params)
+            oauth_params['oauth_signature'] = self._generate_signature(base_string, oauth_token_secret)
+            
+            # Make the request
+            headers = {
+                'Authorization': self._create_oauth_header('POST', access_token_url, oauth_params, oauth_token_secret),
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+            
+            response = requests.post(access_token_url, headers=headers, data={})
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to get access token: {response.text}")
+                return False, {'error': 'Failed to get access token from Twitter'}
+            
+            # Parse the response
+            response_data = dict(urllib.parse.parse_qsl(response.text))
+            
+            return True, {
+                'access_token': response_data.get('oauth_token'),
+                'access_token_secret': response_data.get('oauth_token_secret'),
+                'user_id': response_data.get('user_id'),
+                'screen_name': response_data.get('screen_name')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error completing OAuth: {str(e)}")
+            return False, {'error': str(e)}
+    
     def handle_callback(self, oauth_token: str, oauth_verifier: str, 
                        oauth_token_secret: str) -> Tuple[bool, Dict]:
         """
@@ -242,7 +294,7 @@ class XOAuthService:
             
             # OAuth parameters
             oauth_params = {
-                'oauth_consumer_key': self.consumer_key,
+                'oauth_consumer_key': self.api_key,
                 'oauth_nonce': self._generate_nonce(),
                 'oauth_signature_method': 'HMAC-SHA1',
                 'oauth_timestamp': self._generate_timestamp(),
