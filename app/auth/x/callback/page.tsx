@@ -17,32 +17,75 @@ export default function XOAuthCallback() {
     const handleCallback = async () => {
       try {
         // Get OAuth parameters from URL
-        const oauthToken = searchParams.get('oauth_token');
-        const oauthVerifier = searchParams.get('oauth_verifier');
+        const code = searchParams.get('code');
+        const state = searchParams.get('state');
+        const error = searchParams.get('error');
+        const error_description = searchParams.get('error_description');
         
-        if (!oauthToken || !oauthVerifier) {
+        // Check if we're in a popup window (new hybrid system)
+        if (window.opener) {
+          if (error) {
+            window.opener.postMessage({
+              type: 'oauth-callback',
+              error: error_description || error
+            }, window.location.origin);
+          } else if (code && state) {
+            window.opener.postMessage({
+              type: 'oauth-callback',
+              code,
+              state
+            }, window.location.origin);
+          } else {
+            window.opener.postMessage({
+              type: 'oauth-callback',
+              error: 'Missing authorization code or state'
+            }, window.location.origin);
+          }
+          
+          // Close the popup
+          window.close();
+          return;
+        }
+        
+        // Legacy handling for direct redirect flow
+        if (error) {
+          setStatus('error');
+          setMessage(`OAuth error: ${error_description || error}. Please try connecting your account again.`);
+          return;
+        }
+        
+        if (!code || !state) {
           setStatus('error');
           setMessage('Missing OAuth parameters. Please try connecting your account again.');
           return;
         }
 
-        // Get stored token secret from session storage
-        const oauthTokenSecret = sessionStorage.getItem('oauth_token_secret');
+        // Get stored OAuth data from session storage
+        const storedState = sessionStorage.getItem('x_oauth_state');
+        const codeVerifier = sessionStorage.getItem('x_oauth_code_verifier');
         
-        if (!oauthTokenSecret) {
+        if (!storedState || !codeVerifier) {
           setStatus('error');
           setMessage('OAuth session expired. Please try connecting your account again.');
           return;
         }
 
-        // Clean up session storage
-        sessionStorage.removeItem('oauth_token_secret');
+        // Validate state parameter (CSRF protection)
+        if (state !== storedState) {
+          setStatus('error');
+          setMessage('Invalid state parameter. Please try connecting your account again.');
+          return;
+        }
 
-        // Complete OAuth flow
-        const response = await api.handleXOAuthCallback({
-          oauth_token: oauthToken,
-          oauth_verifier: oauthVerifier,
-          oauth_token_secret: oauthTokenSecret
+        // Clean up session storage
+        sessionStorage.removeItem('x_oauth_state');
+        sessionStorage.removeItem('x_oauth_code_verifier');
+
+        // Exchange code for tokens
+        const response = await api.exchangeXOAuthCode({
+          code: code,
+          code_verifier: codeVerifier,
+          state: state
         });
 
         if (response.success && response.data) {
@@ -51,13 +94,7 @@ export default function XOAuthCallback() {
           
           // Redirect to accounts page after a short delay
           setTimeout(() => {
-            window.close(); // Close popup if opened in popup
-            // If not in popup, redirect to accounts
-            if (window.opener) {
-              window.opener.postMessage({ type: 'oauth_success' }, window.location.origin);
-            } else {
-              router.push('/accounts');
-            }
+            router.push('/accounts');
           }, 2000);
         } else {
           setStatus('error');
