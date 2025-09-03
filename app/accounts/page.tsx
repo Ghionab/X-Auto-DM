@@ -4,7 +4,7 @@ import { Twitter, Plus, Settings, BarChart3, AlertCircle, Loader2, ExternalLink 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
-import HybridXAuth from '@/components/HybridXAuth';
+import ConnectXAccountButton from '@/components/ConnectXAccountButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,9 +15,7 @@ import { api, TwitterAccount } from '@/lib/api';
 export default function Accounts() {
   const [accounts, setAccounts] = useState<TwitterAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [connectingOAuth, setConnectingOAuth] = useState(false);
   const [disconnectingId, setDisconnectingId] = useState<number | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Load accounts on component mount
   useEffect(() => {
@@ -27,9 +25,9 @@ export default function Accounts() {
   const loadAccounts = async () => {
     try {
       setLoading(true);
-      const response = await api.getXOAuthStatus();
+      const response = await api.getTwitterAccounts();
       if (response.success && response.data) {
-        setAccounts(response.data.connected_accounts);
+        setAccounts(response.data.accounts);
       } else {
         toast({
           title: "Error",
@@ -48,18 +46,9 @@ export default function Accounts() {
     }
   };
 
-  const handleConnectAccount = () => {
-    setShowAuthModal(true);
-  };
-
   const handleAuthSuccess = async () => {
-    setShowAuthModal(false);
     // Reload accounts after successful connection
     await loadAccounts();
-  };
-
-  const handleAuthCancel = () => {
-    setShowAuthModal(false);
   };
 
   const handleDisconnectAccount = async (accountId: number) => {
@@ -273,39 +262,17 @@ export default function Accounts() {
           <Card className="border-0 shadow-lg border-dashed border-2 border-gray-200 hover:border-blue-300 transition-colors">
             <CardContent className="p-8 text-center">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                {connectingOAuth ? (
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                ) : (
-                  <Plus className="w-8 h-8 text-blue-600" />
-                )}
+                <Plus className="w-8 h-8 text-blue-600" />
               </div>
               <h3 className="font-bold text-lg text-gray-900 mb-2">Connect New Account</h3>
               <p className="text-gray-600 mb-4 max-w-md mx-auto">
-                Add another X account using secure OAuth 2.0 authentication
+                Add another X account using your credentials
               </p>
-              <Button 
+              <ConnectXAccountButton 
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                onClick={handleConnectAccount}
-                disabled={connectingOAuth}
-              >
-                {connectingOAuth ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Twitter className="w-4 h-4 mr-2" />
-                    Connect X Account
-                  </>
-                )}
-              </Button>
-              {connectingOAuth && (
-                <p className="text-sm text-gray-500 mt-2">
-                  <ExternalLink className="w-4 h-4 inline mr-1" />
-                  Redirecting to X for authorization...
-                </p>
-              )}
+                onSuccess={handleAuthSuccess}
+                size="lg"
+              />
             </CardContent>
           </Card>
 
@@ -329,18 +296,6 @@ export default function Accounts() {
           </Card>
         </div>
       </div>
-      
-      {/* Hybrid X Auth Modal */}
-      {showAuthModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-md w-full mx-4">
-            <HybridXAuth 
-              onSuccess={handleAuthSuccess}
-              onCancel={handleAuthCancel}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
