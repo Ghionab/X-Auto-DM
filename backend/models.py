@@ -65,14 +65,18 @@ class TwitterAccount(db.Model):
     warmup_started_at = db.Column(db.DateTime)
     oauth_tokens_id = db.Column(db.Integer, db.ForeignKey('x_oauth_tokens.id'))
     connection_status = db.Column(db.String(20), default='pending')  # pending, connected, expired, revoked
+    login_cookie = db.Column(db.Text)  # TwitterAPI.io login cookie for authentication
+    twitter_user_id = db.Column(db.String(50))  # Twitter user ID from API
+    screen_name = db.Column(db.String(50))  # Twitter screen name
+    name = db.Column(db.String(100))  # Display name
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def to_dict(self):
         return {
             'id': self.id,
-            'username': self.username,
-            'display_name': self.display_name,
+            'username': self.screen_name or self.username,
+            'display_name': self.name or self.display_name,
             'profile_image_url': self.profile_image_url,
             'followers_count': self.followers_count,
             'following_count': self.following_count,
@@ -287,3 +291,46 @@ class APIUsage(db.Model):
     
     # Relationships
     user = db.relationship('User', backref='api_usage')
+
+class APICallLog(db.Model):
+    """Log all twitterapi.io API calls for monitoring and analytics"""
+    __tablename__ = 'api_call_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    twitter_account_id = db.Column(db.Integer, db.ForeignKey('twitter_accounts.id'))
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'))
+    endpoint = db.Column(db.String(100), nullable=False)
+    method = db.Column(db.String(10), nullable=False)  # GET, POST, etc.
+    status_code = db.Column(db.Integer)
+    response_time_ms = db.Column(db.Integer)
+    success = db.Column(db.Boolean, default=False)
+    error_message = db.Column(db.Text)
+    error_category = db.Column(db.String(50))  # authentication, rate_limit, user_error, api_error
+    request_data = db.Column(db.Text)  # JSON string of request parameters (excluding sensitive data)
+    response_data = db.Column(db.Text)  # JSON string of response data (excluding sensitive data)
+    retry_count = db.Column(db.Integer, default=0)
+    proxy_used = db.Column(db.String(200))  # Proxy URL used (without credentials)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='api_call_logs')
+    twitter_account = db.relationship('TwitterAccount', backref='api_call_logs')
+    campaign = db.relationship('Campaign', backref='api_call_logs')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'twitter_account_id': self.twitter_account_id,
+            'campaign_id': self.campaign_id,
+            'endpoint': self.endpoint,
+            'method': self.method,
+            'status_code': self.status_code,
+            'response_time_ms': self.response_time_ms,
+            'success': self.success,
+            'error_message': self.error_message,
+            'error_category': self.error_category,
+            'retry_count': self.retry_count,
+            'created_at': self.created_at.isoformat()
+        }
