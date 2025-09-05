@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'My Accounts', href: '/accounts', icon: Twitter },
+  { name: 'Send DMs', href: '/dm', icon: MessageCircle },
   { name: 'Campaigns', href: '/campaigns', icon: Zap },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Plans', href: '/plans', icon: CreditCard },
