@@ -23,11 +23,25 @@ from twitterio import (
     get_user_info, follow_user, unfollow_user, upload_media
 )
 
-# Configure logging
+# Configure logging with enhanced detail for API debugging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('xreacher.log', mode='a')
+    ]
 )
+
+# Set specific loggers for detailed API debugging
+logging.getLogger('twitterapi_core').setLevel(logging.INFO)
+logging.getLogger('twitterio.auth').setLevel(logging.INFO)
+logging.getLogger('twitterio').setLevel(logging.INFO)
+
+# Reduce noise from other libraries
+logging.getLogger('requests').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 def create_app(config_name=None):
