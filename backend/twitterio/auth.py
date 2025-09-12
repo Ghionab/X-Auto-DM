@@ -4,6 +4,7 @@ Handles Twitter account login using the twitterapi.io user_login_v2 endpoint
 """
 
 import logging
+import json
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
@@ -65,6 +66,38 @@ class TwitterAuthClient:
         self.proxy = proxy
         self._current_session: Optional[LoginSession] = None
     
+    def _filter_sensitive_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Filter sensitive data from logs to prevent exposure of credentials
+        
+        Args:
+            data: Dictionary that may contain sensitive data
+            
+        Returns:
+            Dict[str, Any]: Filtered dictionary with sensitive data masked
+        """
+        if not isinstance(data, dict):
+            return data
+        
+        sensitive_fields = {
+            'password', 'totp_secret', 'login_cookie', 'login_cookies', 
+            'auth_token', 'access_token', 'refresh_token', 'api_key',
+            'secret', 'token', 'credential'
+        }
+        
+        filtered = {}
+        for key, value in data.items():
+            key_lower = key.lower()
+            if any(sensitive in key_lower for sensitive in sensitive_fields):
+                if isinstance(value, str) and len(value) > 10:
+                    filtered[key] = f"{value[:4]}...{value[-4:]}"
+                else:
+                    filtered[key] = "[FILTERED]"
+            else:
+                filtered[key] = value
+        
+        return filtered
+    
     def login(self, credentials: LoginCredentials) -> LoginSession:
         """
         Login to Twitter account using twitterapi.io user_login_v2 endpoint
@@ -72,7 +105,7 @@ class TwitterAuthClient:
         According to the API docs:
         POST /twitter/user_login_v2
         - Requires: username, email, password, totp_secret, proxy
-        - Returns: login_cookie, status, msg
+        - Returns: login_cookies (or login_cookie), status, message
         
         Args:
             credentials: Twitter login credentials
@@ -97,6 +130,12 @@ class TwitterAuthClient:
         }
         
         logger.info(f"Attempting login for Twitter account: {credentials.username}")
+        logger.info(f"Login request data: username={credentials.username}, email={credentials.email}")
+        logger.debug(f"Request payload keys: {list(data.keys())}")
+        
+        # Log filtered request data for debugging (without sensitive info)
+        filtered_data = self._filter_sensitive_data(data)
+        logger.debug(f"Filtered request payload: {filtered_data}")
         
         try:
             response = self.core_client.make_request(
@@ -106,14 +145,23 @@ class TwitterAuthClient:
                 proxy=credentials.proxy or self.proxy
             )
             
-            if "login_cookie" not in response:
-                raise TwitterAPIError("Login failed: No login_cookie received")
+            logger.info(f"Login response received for {credentials.username}")
+            logger.debug(f"Response keys: {list(response.keys()) if response else 'None'}")
+            logger.debug(f"Response status: {response.get('status') if response else 'None'}")
+            
+            # Log filtered response for debugging (without sensitive info)
+            if response:
+                filtered_response = self._filter_sensitive_data(response)
+                logger.debug(f"Filtered response data: {filtered_response}")
+            
+            # Parse login response to extract cookie
+            login_cookie = self._parse_login_response(response)
             
             # Create session object
             session = LoginSession(
-                login_cookie=response["login_cookie"],
+                login_cookie=login_cookie,
                 status=response.get("status", "success"),
-                message=response.get("msg"),
+                message=response.get("msg") or response.get("message"),
                 username=credentials.username
             )
             
@@ -121,14 +169,79 @@ class TwitterAuthClient:
             self._current_session = session
             
             logger.info(f"Successfully authenticated Twitter account: {credentials.username}")
+            logger.info(f"Session status: {session.status}, message: {session.message}")
+            logger.debug(f"Login cookie length: {len(login_cookie) if login_cookie else 0} characters")
             return session
             
         except TwitterAPIError as e:
-            logger.error(f"Login failed for {credentials.username}: {e}")
+            logger.error(f"TwitterAPI error during login for {credentials.username}: {e}")
+            if hasattr(e, 'response_data') and e.response_data:
+                logger.error(f"Error response data: {e.response_data}")
+            if hasattr(e, 'status_code') and e.status_code:
+                logger.error(f"HTTP status code: {e.status_code}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during login: {e}")
+            logger.error(f"Unexpected error during login for {credentials.username}: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise TwitterAPIError(f"Login failed: {str(e)}")
+    
+    def _parse_login_response(self, response: Dict[str, Any]) -> str:
+        """
+        Parse login response to extract the correct login cookie field
+        
+        The TwitterAPI.io API may return either 'login_cookie' or 'login_cookies'
+        depending on the API version or configuration. This method handles both cases.
+        
+        Args:
+            response: API response dictionary
+            
+        Returns:
+            str: Login cookie string
+            
+        Raises:
+            TwitterAPIError: If no valid login cookie field is found
+        """
+        if not response:
+            logger.error("Empty or None response received")
+            raise TwitterAPIError("Login failed: Empty response received")
+        
+        # Check for login_cookies (plural) first as this appears to be the current format
+        if "login_cookies" in response:
+            login_cookie = response["login_cookies"]
+            logger.debug("Found 'login_cookies' field in response")
+            if login_cookie:
+                return login_cookie
+            else:
+                logger.warning("'login_cookies' field is empty")
+        
+        # Check for login_cookie (singular) as fallback
+        if "login_cookie" in response:
+            login_cookie = response["login_cookie"]
+            logger.debug("Found 'login_cookie' field in response")
+            if login_cookie:
+                return login_cookie
+            else:
+                logger.warning("'login_cookie' field is empty")
+        
+        # If neither field is found or both are empty
+        logger.error(f"No valid login cookie found in response")
+        logger.error(f"Available response fields: {list(response.keys())}")
+        
+        # Log filtered response for debugging
+        filtered_response = self._filter_sensitive_data(response) if hasattr(self, '_filter_sensitive_data') else response
+        logger.error(f"Response content (filtered): {filtered_response}")
+        
+        # Check if response indicates an error
+        status = response.get("status", "unknown")
+        message = response.get("msg") or response.get("message", "No error message provided")
+        
+        if status != "success":
+            logger.error(f"Login failed with status: {status}, message: {message}")
+            raise TwitterAPIError(f"Login failed: {message}")
+        
+        raise TwitterAPIError("Login failed: No login cookie received in response")
     
     def get_current_session(self) -> Optional[LoginSession]:
         """
