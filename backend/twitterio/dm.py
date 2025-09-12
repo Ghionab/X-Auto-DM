@@ -4,6 +4,7 @@ Handles sending and retrieving direct messages using twitterapi.io endpoints
 """
 
 import logging
+import re
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -48,6 +49,32 @@ class TwitterDMClient:
         self.login_cookie = login_cookie
         self.proxy = proxy
     
+    def _validate_reply_to_message_id(self, reply_to_message_id: Optional[str]) -> bool:
+        """
+        Validate reply_to_message_id format
+        
+        Args:
+            reply_to_message_id: Message ID to validate
+            
+        Returns:
+            bool: True if valid format, False otherwise
+        """
+        if reply_to_message_id is None:
+            return False
+            
+        if not reply_to_message_id or not reply_to_message_id.strip():
+            return False
+        
+        # Twitter message IDs are typically numeric strings (Long values)
+        # They should be non-empty strings containing only digits
+        pattern = r'^\d+$'
+        is_valid = bool(re.match(pattern, reply_to_message_id.strip()))
+        
+        if not is_valid:
+            logger.warning(f"Invalid reply_to_message_id format: '{reply_to_message_id}' - must be numeric")
+        
+        return is_valid
+
     def send_dm(self, user_id: str, text: str, 
                 media_ids: Optional[List[str]] = None,
                 reply_to_message_id: Optional[str] = None) -> DMSendResult:
@@ -78,14 +105,41 @@ class TwitterDMClient:
         if not text or not text.strip():
             raise TwitterAPIError("Message text is required")
         
+        logger.info(f"Preparing to send DM to user: {user_id}, text length: {len(text)}")
+        
+        # Build request data with only required parameters
         data = {
             "user_id": user_id,
-            "text": text.strip(),
-            "media_ids": media_ids or [],
-            "reply_to_message_id": reply_to_message_id or ""
+            "text": text.strip()
         }
         
-        logger.info(f"Sending DM to user: {user_id}, text length: {len(text)}")
+        # Validate and conditionally add optional parameters
+        
+        # Handle media_ids parameter
+        if media_ids and len(media_ids) > 0:
+            # Filter out empty/None media IDs
+            valid_media_ids = [mid for mid in media_ids if mid and mid.strip()]
+            if valid_media_ids:
+                data["media_ids"] = valid_media_ids
+                logger.debug(f"Including media_ids parameter: {len(valid_media_ids)} media items")
+            else:
+                logger.debug("media_ids provided but all entries were empty - excluding from request")
+        else:
+            logger.debug("media_ids not provided or empty - excluding from request")
+            
+        # Handle reply_to_message_id parameter
+        if reply_to_message_id:
+            if self._validate_reply_to_message_id(reply_to_message_id):
+                data["reply_to_message_id"] = reply_to_message_id.strip()
+                logger.debug(f"Including reply_to_message_id parameter: {reply_to_message_id}")
+            else:
+                logger.warning(f"Invalid reply_to_message_id '{reply_to_message_id}' - excluding from request")
+        else:
+            logger.debug("reply_to_message_id not provided - excluding from request")
+        
+        # Log final request data structure for debugging
+        logger.debug(f"Final request data structure: {data}")
+        logger.info(f"Sending DM request with {len(data)} parameters: {list(data.keys())}")
         
         try:
             response = self.core_client.make_request(
