@@ -123,17 +123,26 @@ class Campaign(db.Model):
     __tablename__ = 'campaigns'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    twitter_account_id = db.Column(db.Integer, db.ForeignKey('twitter_accounts.id'), nullable=False)
-    name = db.Column(db.String(200), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    twitter_account_id = db.Column(db.Integer, db.ForeignKey('twitter_accounts.id'), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    status = db.Column(db.String(20), default='draft')  # draft, active, paused, completed, failed
-    target_type = db.Column(db.String(50))  # followers_scrape, manual_list, csv_upload
-    target_username = db.Column(db.String(50))  # For follower scraping
-    ai_rules = db.Column(db.Text)  # JSON string of AI rules and instructions
-    message_template = db.Column(db.Text)
+    
+    # Target Configuration
+    target_type = db.Column(db.String(50), nullable=False)  # user_followers, list_members, manual_list, csv_upload
+    target_identifier = db.Column(db.String(255), nullable=False)  # username or list_id
+    
+    # Message Configuration
+    message_template = db.Column(db.Text, nullable=False)
     personalization_enabled = db.Column(db.Boolean, default=True)
+    ai_rules = db.Column(db.Text)  # JSON string of AI rules and instructions
     preview_message = db.Column(db.Text)
+    
+    # Campaign Settings
+    daily_limit = db.Column(db.Integer, default=50)
+    delay_min = db.Column(db.Integer, default=30)  # Minutes between messages
+    delay_max = db.Column(db.Integer, default=120)
+    status = db.Column(db.String(20), default='draft', index=True)  # draft, active, paused, completed, failed
     
     # Campaign metrics
     total_targets = db.Column(db.Integer, default=0)
@@ -142,20 +151,17 @@ class Campaign(db.Model):
     positive_replies = db.Column(db.Integer, default=0)
     negative_replies = db.Column(db.Integer, default=0)
     
-    # Scheduling
-    scheduled_start = db.Column(db.DateTime)
-    scheduled_end = db.Column(db.DateTime)
-    daily_limit = db.Column(db.Integer, default=50)
-    delay_min = db.Column(db.Integer, default=30)  # Minutes between messages
-    delay_max = db.Column(db.Integer, default=120)
-    
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    started_at = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
     
     # Relationships
     twitter_account = db.relationship('TwitterAccount', backref='campaigns')
     targets = db.relationship('CampaignTarget', backref='campaign', cascade='all, delete-orphan')
     messages = db.relationship('DirectMessage', backref='campaign', cascade='all, delete-orphan')
+    campaign_messages = db.relationship('CampaignMessage', backref='campaign', cascade='all, delete-orphan')
     
     def to_dict(self):
         return {
@@ -164,7 +170,7 @@ class Campaign(db.Model):
             'description': self.description,
             'status': self.status,
             'target_type': self.target_type,
-            'target_username': self.target_username,
+            'target_identifier': self.target_identifier,
             'ai_rules': json.loads(self.ai_rules) if self.ai_rules else {},
             'message_template': self.message_template,
             'personalization_enabled': self.personalization_enabled,
@@ -175,7 +181,9 @@ class Campaign(db.Model):
             'negative_replies': self.negative_replies,
             'daily_limit': self.daily_limit,
             'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            'updated_at': self.updated_at.isoformat(),
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
         }
 
 class CampaignTarget(db.Model):
@@ -183,31 +191,86 @@ class CampaignTarget(db.Model):
     __tablename__ = 'campaign_targets'
     
     id = db.Column(db.Integer, primary_key=True)
-    campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=False)
-    username = db.Column(db.String(50), nullable=False)
-    display_name = db.Column(db.String(100))
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=False, index=True)
+    
+    # Target User Data
+    twitter_user_id = db.Column(db.String(50), nullable=False, index=True)
+    username = db.Column(db.String(255), nullable=False, index=True)
+    display_name = db.Column(db.String(255))
     bio = db.Column(db.Text)
-    followers_count = db.Column(db.Integer)
+    profile_picture = db.Column(db.String(500))
+    follower_count = db.Column(db.Integer, index=True)
     following_count = db.Column(db.Integer)
-    profile_image_url = db.Column(db.String(500))
-    status = db.Column(db.String(20), default='pending')  # pending, sent, replied, failed
+    is_verified = db.Column(db.Boolean, default=False, index=True)
+    can_dm = db.Column(db.Boolean, default=True)
+    
+    # Processing Status
+    status = db.Column(db.String(20), default='pending', index=True)  # pending, sent, failed, replied
+    error_message = db.Column(db.Text)
     message_sent_at = db.Column(db.DateTime)
     reply_received_at = db.Column(db.DateTime)
     reply_sentiment = db.Column(db.String(20))  # positive, negative, neutral
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
     def to_dict(self):
         return {
             'id': self.id,
+            'twitter_user_id': self.twitter_user_id,
             'username': self.username,
             'display_name': self.display_name,
             'bio': self.bio,
-            'followers_count': self.followers_count,
+            'profile_picture': self.profile_picture,
+            'follower_count': self.follower_count,
             'following_count': self.following_count,
+            'is_verified': self.is_verified,
+            'can_dm': self.can_dm,
             'status': self.status,
+            'error_message': self.error_message,
             'message_sent_at': self.message_sent_at.isoformat() if self.message_sent_at else None,
             'reply_received_at': self.reply_received_at.isoformat() if self.reply_received_at else None,
-            'reply_sentiment': self.reply_sentiment
+            'reply_sentiment': self.reply_sentiment,
+            'created_at': self.created_at.isoformat()
+        }
+
+class CampaignMessage(db.Model):
+    """Campaign message tracking model"""
+    __tablename__ = 'campaign_messages'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=False, index=True)
+    target_id = db.Column(db.Integer, db.ForeignKey('campaign_targets.id'), nullable=False, index=True)
+    
+    # Message Data
+    message_content = db.Column(db.Text, nullable=False)
+    twitter_message_id = db.Column(db.String(50), index=True)
+    
+    # Status Tracking
+    status = db.Column(db.String(20), default='pending', index=True)  # pending, sent, delivered, failed, replied
+    error_message = db.Column(db.Text)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    sent_at = db.Column(db.DateTime)
+    delivered_at = db.Column(db.DateTime)
+    replied_at = db.Column(db.DateTime)
+    
+    # Relationships
+    target = db.relationship('CampaignTarget', backref='campaign_messages')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'campaign_id': self.campaign_id,
+            'target_id': self.target_id,
+            'message_content': self.message_content,
+            'twitter_message_id': self.twitter_message_id,
+            'status': self.status,
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat(),
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
+            'delivered_at': self.delivered_at.isoformat() if self.delivered_at else None,
+            'replied_at': self.replied_at.isoformat() if self.replied_at else None
         }
 
 class DirectMessage(db.Model):
