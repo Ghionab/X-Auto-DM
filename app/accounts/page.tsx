@@ -1,6 +1,6 @@
 'use client';
 
-import { Twitter, Plus, Settings, BarChart3, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Twitter, Plus, Settings, BarChart3, AlertCircle, Loader2, ExternalLink, RefreshCw, Shield, Users } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
@@ -16,6 +16,8 @@ export default function Accounts() {
   const [accounts, setAccounts] = useState<TwitterAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [disconnectingId, setDisconnectingId] = useState<number | null>(null);
+  const [refreshingAccountId, setRefreshingAccountId] = useState<number | null>(null);
+  const [accountsInfo, setAccountsInfo] = useState<{[key: number]: any}>({});
 
   // Load accounts on component mount
   useEffect(() => {
@@ -26,8 +28,10 @@ export default function Accounts() {
     try {
       setLoading(true);
       const response = await api.getTwitterAccounts();
-      if (response.success && response.data) {
+      if (response.success && response.data?.accounts) {
         setAccounts(response.data.accounts);
+        // Load detailed account info for each connected account
+        await loadAccountsInfo(response.data.accounts);
       } else {
         toast({
           title: "Error",
@@ -46,9 +50,68 @@ export default function Accounts() {
     }
   };
 
+  const loadAccountsInfo = async (accountsList: TwitterAccount[]) => {
+    const connectedAccounts = accountsList.filter(account => account.connection_status === 'connected');
+    const accountInfoPromises = connectedAccounts.map(async (account) => {
+      try {
+        const response = await api.getMyAccountInfo(account.id);
+        if (response.success && response.data?.account) {
+          return { accountId: account.id, info: response.data.account };
+        }
+      } catch (error) {
+        console.error(`Failed to load info for account ${account.id}:`, error);
+      }
+      return null;
+    });
+
+    const results = await Promise.all(accountInfoPromises);
+    const newAccountsInfo: {[key: number]: any} = {};
+    
+    results.forEach(result => {
+      if (result) {
+        newAccountsInfo[result.accountId] = result.info;
+      }
+    });
+    
+    setAccountsInfo(newAccountsInfo);
+  };
+
   const handleAuthSuccess = async () => {
     // Reload accounts after successful connection
     await loadAccounts();
+  };
+
+  const handleRefreshAccountInfo = async (accountId: number) => {
+    try {
+      setRefreshingAccountId(accountId);
+      const response = await api.getMyAccountInfo(accountId);
+      
+      if (response.success && response.data?.account) {
+        setAccountsInfo(prev => ({
+          ...prev,
+          [accountId]: response.data!.account
+        }));
+        
+        toast({
+          title: "Success",
+          description: "Account information refreshed",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to refresh account info",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refresh account information",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshingAccountId(null);
+    }
   };
 
   const handleDisconnectAccount = async (accountId: number) => {
@@ -170,79 +233,148 @@ export default function Accounts() {
             </div>
           ) : accounts.length > 0 ? (
             <div className="space-y-4">
-              {accounts.map((account) => (
-                <Card key={account.id} className="border-0 shadow-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                          {account.profile_image_url ? (
-                            <img 
-                              src={account.profile_image_url} 
-                              alt={account.display_name}
-                              className="w-16 h-16 rounded-full object-cover"
-                            />
-                          ) : (
-                            account.display_name?.charAt(0)?.toUpperCase() || account.username?.charAt(1)?.toUpperCase() || 'X'
-                          )}
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-bold text-lg text-gray-900">{account.display_name || account.username}</h3>
-                            {account.is_verified && (
-                              <Badge className="bg-blue-100 text-blue-700">Verified</Badge>
+              {accounts.map((account) => {
+                const accountInfo = accountsInfo[account.id];
+                
+                return (
+                  <Card key={account.id} className="border-0 shadow-lg">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                            {(accountInfo?.profile_picture_url || account.profile_image_url) ? (
+                              <img 
+                                src={accountInfo?.profile_picture_url || account.profile_image_url} 
+                                alt={accountInfo?.display_name || account.display_name}
+                                className="w-16 h-16 rounded-full object-cover"
+                              />
+                            ) : (
+                              (accountInfo?.display_name || account.display_name)?.charAt(0)?.toUpperCase() || 
+                              account.username?.charAt(0)?.toUpperCase() || 'X'
                             )}
-                            {getConnectionStatusBadge(account.connection_status)}
                           </div>
-                          <p className="text-gray-600">@{account.username}</p>
-                          <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                            <span>{formatNumber(account.followers_count)} followers</span>
-                            <span>{formatNumber(account.following_count)} following</span>
-                            <span>Warmup: {account.warmup_status}</span>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h3 className="font-bold text-lg text-gray-900">
+                                {accountInfo?.display_name || account.display_name || account.username}
+                              </h3>
+                              {(accountInfo?.verified || accountInfo?.is_blue_verified || account.is_verified) && (
+                                <Shield className="w-5 h-5 text-blue-500" />
+                              )}
+                              {getConnectionStatusBadge(account.connection_status)}
+                            </div>
+                            <p className="text-gray-600">@{accountInfo?.username || account.username}</p>
+                            
+                            {/* Enhanced account details */}
+                            <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                              <div className="flex items-center space-x-1">
+                                <Users className="w-4 h-4" />
+                                <span>{formatNumber(accountInfo?.follower_count || account.followers_count)} followers</span>
+                              </div>
+                              <span>{formatNumber(accountInfo?.following_count || account.following_count)} following</span>
+                            </div>
+                            
+                            {/* Account status indicators */}
+                            <div className="flex items-center space-x-2 mt-2">
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                                DM Enabled
+                              </Badge>
+                              {accountInfo?.verified_type && (
+                                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                                  {accountInfo.verified_type}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                Warmup: {account.warmup_status}
+                              </Badge>
+                            </div>
+                            
+                            {/* Account description */}
+                            {accountInfo?.description && (
+                              <p className="text-sm text-gray-600 mt-2 line-clamp-2 max-w-md">
+                                {accountInfo.description}
+                              </p>
+                            )}
                           </div>
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDisconnectAccount(account.id)}
-                          disabled={disconnectingId === account.id}
-                        >
-                          {disconnectingId === account.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            'Disconnect'
+                        
+                        <div className="flex items-center space-x-2">
+                          {account.connection_status === 'connected' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRefreshAccountInfo(account.id)}
+                              disabled={refreshingAccountId === account.id}
+                              title="Refresh account information"
+                            >
+                              {refreshingAccountId === account.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4" />
+                              )}
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDisconnectAccount(account.id)}
+                            disabled={disconnectingId === account.id}
+                          >
+                            {disconnectingId === account.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              'Disconnect'
+                            )}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600">DMs Sent</div>
-                        <div className="text-2xl font-bold text-gray-900">-</div>
-                        <div className="text-xs text-gray-500">Coming soon</div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600">Reply Rate</div>
-                        <div className="text-2xl font-bold text-green-600">-</div>
-                        <div className="text-xs text-gray-500">Coming soon</div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-lg flex items-center justify-between">
-                        <div>
-                          <div className="text-sm text-gray-600">Settings</div>
-                          <Button variant="ghost" size="sm" className="p-0 h-auto mt-1">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <div className="text-sm text-gray-600">Account Connected</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {accountInfo?.connected_at ? 
+                              new Date(accountInfo.connected_at).toLocaleDateString() : 
+                              'Unknown'
+                            }
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {accountInfo?.location || 'No location'}
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <div className="text-sm text-gray-600">Verification</div>
+                          <div className="text-lg font-bold text-blue-600">
+                            {accountInfo?.is_blue_verified ? 'Blue Verified' : 
+                             accountInfo?.verified ? 'Verified' : 'Not Verified'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {accountInfo?.verified_type || 'Standard account'}
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg flex items-center justify-between">
+                          <div>
+                            <div className="text-sm text-gray-600">Account Status</div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {accountInfo?.connection_status === 'connected' ? 'Active' : 'Inactive'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {accountInfo?.last_updated ? 
+                                `Updated ${new Date(accountInfo.last_updated).toLocaleDateString()}` :
+                                'Status unknown'
+                              }
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="sm" className="p-0 h-auto">
                             <Settings className="w-4 h-4 mr-1" />
                             Configure
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <Card className="border-0 shadow-lg">
