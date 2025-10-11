@@ -62,7 +62,7 @@ export default function UserListForm() {
       const cleanUsername = targetAccount.replace('@', '').trim();
       
       const response = await withToast(
-        api.scrapeFollowers(cleanUsername, maxFollowers),
+        api.scrapeFollowersLegacy(cleanUsername, maxFollowers),
         `Successfully scraped followers from @${cleanUsername}`,
         `Failed to scrape followers from @${cleanUsername}`
       );
@@ -89,10 +89,9 @@ export default function UserListForm() {
     try {
       const campaignData = {
         name: campaignName,
-        twitter_account_id: selectedAccountId,
-        target_type: 'manual',
+        sender_account_id: selectedAccountId,
+        target_type: 'csv_upload' as const,
         message_template: dmTemplate,
-        personalization_enabled: true,
         daily_limit: 50
       };
 
@@ -106,7 +105,7 @@ export default function UserListForm() {
         // Add targets to the campaign
         const targets = usernames.map(username => ({ username }));
         await withToast(
-          api.addCampaignTargets(response.id, targets),
+          api.addCampaignTargets(response.campaign.id, targets),
           `Added ${targets.length} targets to campaign`,
           'Failed to add targets to campaign'
         );
