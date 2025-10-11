@@ -194,7 +194,7 @@ class CampaignTarget(db.Model):
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=False, index=True)
     
     # Target User Data
-    twitter_user_id = db.Column(db.String(50), nullable=False, index=True)
+    twitter_user_id = db.Column(db.String(50), nullable=True, index=True)  # May be null for CSV uploads until enriched
     username = db.Column(db.String(255), nullable=False, index=True)
     display_name = db.Column(db.String(255))
     bio = db.Column(db.Text)
@@ -203,6 +203,10 @@ class CampaignTarget(db.Model):
     following_count = db.Column(db.Integer)
     is_verified = db.Column(db.Boolean, default=False, index=True)
     can_dm = db.Column(db.Boolean, default=True)
+    user_id = db.Column(db.String(50))  # Additional user_id field for enhanced tracking
+    profile_data = db.Column(db.JSON)  # Store complete profile data from TwitterAPI.io
+    notes = db.Column(db.Text)  # For CSV upload notes column
+    source = db.Column(db.String(20), default='scraped')  # scraped, csv_upload
     
     # Processing Status
     status = db.Column(db.String(20), default='pending', index=True)  # pending, sent, failed, replied
@@ -225,6 +229,10 @@ class CampaignTarget(db.Model):
             'following_count': self.following_count,
             'is_verified': self.is_verified,
             'can_dm': self.can_dm,
+            'user_id': self.user_id,
+            'profile_data': self.profile_data,
+            'notes': self.notes,
+            'source': self.source,
             'status': self.status,
             'error_message': self.error_message,
             'message_sent_at': self.message_sent_at.isoformat() if self.message_sent_at else None,
@@ -288,12 +296,18 @@ class DirectMessage(db.Model):
     error_message = db.Column(db.Text)
     sentiment = db.Column(db.String(20))  # For inbound messages: positive, negative, neutral
     ai_generated = db.Column(db.Boolean, default=True)
+    recipient_username = db.Column(db.String(50))
+    recipient_display_name = db.Column(db.String(100))
+    response_time_ms = db.Column(db.Integer)
+    retry_count = db.Column(db.Integer, default=0)
+    api_call_log_id = db.Column(db.Integer, db.ForeignKey('api_call_logs.id'))
     sent_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
     target = db.relationship('CampaignTarget', backref='messages')
     twitter_account = db.relationship('TwitterAccount')
+    api_call_log = db.relationship('APICallLog', backref='direct_messages')
     
     def to_dict(self):
         return {
@@ -303,6 +317,10 @@ class DirectMessage(db.Model):
             'status': self.status,
             'sentiment': self.sentiment,
             'ai_generated': self.ai_generated,
+            'recipient_username': self.recipient_username,
+            'recipient_display_name': self.recipient_display_name,
+            'response_time_ms': self.response_time_ms,
+            'retry_count': self.retry_count,
             'sent_at': self.sent_at.isoformat() if self.sent_at else None,
             'created_at': self.created_at.isoformat()
         }
@@ -374,6 +392,9 @@ class APICallLog(db.Model):
     response_data = db.Column(db.Text)  # JSON string of response data (excluding sensitive data)
     retry_count = db.Column(db.Integer, default=0)
     proxy_used = db.Column(db.String(200))  # Proxy URL used (without credentials)
+    endpoint_category = db.Column(db.String(50))  # user_info, dm_send, followers, etc.
+    cache_hit = db.Column(db.Boolean, default=False)
+    user_agent = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -395,5 +416,222 @@ class APICallLog(db.Model):
             'error_message': self.error_message,
             'error_category': self.error_category,
             'retry_count': self.retry_count,
+            'endpoint_category': self.endpoint_category,
+            'cache_hit': self.cache_hit,
+            'created_at': self.created_at.isoformat()
+        }
+
+class UserInfoCache(db.Model):
+    """Cache for user information from TwitterAPI.io"""
+    __tablename__ = 'user_info_cache'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), nullable=False, unique=True)
+    user_id = db.Column(db.String(50), nullable=False)
+    display_name = db.Column(db.String(100))
+    profile_picture_url = db.Column(db.Text)
+    follower_count = db.Column(db.Integer)
+    following_count = db.Column(db.Integer)
+    verified = db.Column(db.Boolean, default=False)
+    can_dm = db.Column(db.Boolean, default=True)
+    is_private = db.Column(db.Boolean, default=False)
+    raw_data = db.Column(db.JSON)
+    cached_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'user_id': self.user_id,
+            'display_name': self.display_name,
+            'profile_picture_url': self.profile_picture_url,
+            'follower_count': self.follower_count,
+            'following_count': self.following_count,
+            'verified': self.verified,
+            'can_dm': self.can_dm,
+            'is_private': self.is_private,
+            'cached_at': self.cached_at.isoformat(),
+            'expires_at': self.expires_at.isoformat()
+        }
+    
+    def is_expired(self):
+        """Check if cache entry is expired"""
+        return datetime.utcnow() > self.expires_at
+
+class ConnectedAccountCache(db.Model):
+    """Cache for connected account information"""
+    __tablename__ = 'connected_account_cache'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    twitter_account_id = db.Column(db.Integer, db.ForeignKey('twitter_accounts.id'), nullable=False)
+    username = db.Column(db.String(50))
+    display_name = db.Column(db.String(100))
+    profile_picture_url = db.Column(db.Text)
+    follower_count = db.Column(db.Integer)
+    following_count = db.Column(db.Integer)
+    verified = db.Column(db.Boolean, default=False)
+    raw_data = db.Column(db.JSON)
+    cached_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    
+    # Relationships
+    twitter_account = db.relationship('TwitterAccount', backref='account_cache')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'twitter_account_id': self.twitter_account_id,
+            'username': self.username,
+            'display_name': self.display_name,
+            'profile_picture_url': self.profile_picture_url,
+            'follower_count': self.follower_count,
+            'following_count': self.following_count,
+            'verified': self.verified,
+            'cached_at': self.cached_at.isoformat(),
+            'expires_at': self.expires_at.isoformat()
+        }
+    
+    def is_expired(self):
+        """Check if cache entry is expired"""
+        return datetime.utcnow() > self.expires_at
+
+# AI Generation Infrastructure Models
+
+class AIGenerationHistory(db.Model):
+    """AI generation history for tracking all generated DMs"""
+    __tablename__ = 'ai_generation_history'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    recipient_username = db.Column(db.String(50), nullable=False, index=True)
+    generated_content = db.Column(db.Text, nullable=False)
+    generation_options = db.Column(db.JSON, nullable=False)
+    recipient_analysis = db.Column(db.JSON, nullable=False)
+    quality_score = db.Column(db.Float)
+    personalization_score = db.Column(db.Float)
+    user_rating = db.Column(db.Integer)  # 1-5 stars
+    was_sent = db.Column(db.Boolean, default=False)
+    was_edited = db.Column(db.Boolean, default=False)
+    edited_content = db.Column(db.Text)
+    generation_time_ms = db.Column(db.Integer)
+    ai_model_used = db.Column(db.String(50), default='gemini-pro')
+    error_message = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    # Relationships
+    user = db.relationship('User', backref='ai_generation_history')
+    feedback = db.relationship('AIGenerationFeedback', backref='generation_history', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'recipient_username': self.recipient_username,
+            'generated_content': self.generated_content,
+            'generation_options': self.generation_options,
+            'recipient_analysis': self.recipient_analysis,
+            'quality_score': self.quality_score,
+            'personalization_score': self.personalization_score,
+            'user_rating': self.user_rating,
+            'was_sent': self.was_sent,
+            'was_edited': self.was_edited,
+            'edited_content': self.edited_content,
+            'generation_time_ms': self.generation_time_ms,
+            'ai_model_used': self.ai_model_used,
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat()
+        }
+
+class RecipientAnalysisCache(db.Model):
+    """Cache for recipient analysis data"""
+    __tablename__ = 'recipient_analysis_cache'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    analysis_data = db.Column(db.JSON, nullable=False)
+    analysis_depth = db.Column(db.String(20), nullable=False, default='standard')
+    cache_version = db.Column(db.String(10), default='1.0')
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'analysis_data': self.analysis_data,
+            'analysis_depth': self.analysis_depth,
+            'cache_version': self.cache_version,
+            'expires_at': self.expires_at.isoformat(),
+            'created_at': self.created_at.isoformat()
+        }
+    
+    def is_expired(self):
+        """Check if cache entry is expired"""
+        return datetime.utcnow() > self.expires_at
+
+class AIGenerationMetrics(db.Model):
+    """Daily metrics for AI generation performance"""
+    __tablename__ = 'ai_generation_metrics'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    generation_date = db.Column(db.Date, nullable=False, index=True)
+    total_generations = db.Column(db.Integer, default=0)
+    successful_generations = db.Column(db.Integer, default=0)
+    messages_sent = db.Column(db.Integer, default=0)
+    average_quality_score = db.Column(db.Float)
+    average_personalization_score = db.Column(db.Float)
+    average_user_rating = db.Column(db.Float)
+    average_generation_time_ms = db.Column(db.Integer)
+    total_api_calls = db.Column(db.Integer, default=0)
+    total_tokens_used = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='ai_generation_metrics')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'generation_date': self.generation_date.isoformat(),
+            'total_generations': self.total_generations,
+            'successful_generations': self.successful_generations,
+            'messages_sent': self.messages_sent,
+            'average_quality_score': self.average_quality_score,
+            'average_personalization_score': self.average_personalization_score,
+            'average_user_rating': self.average_user_rating,
+            'average_generation_time_ms': self.average_generation_time_ms,
+            'total_api_calls': self.total_api_calls,
+            'total_tokens_used': self.total_tokens_used,
+            'created_at': self.created_at.isoformat()
+        }
+
+class AIGenerationFeedback(db.Model):
+    """User feedback for AI generation improvement"""
+    __tablename__ = 'ai_generation_feedback'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    generation_history_id = db.Column(db.Integer, db.ForeignKey('ai_generation_history.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    rating = db.Column(db.Integer, nullable=False)  # 1-5 stars
+    feedback_text = db.Column(db.Text)
+    improvement_suggestions = db.Column(db.JSON)
+    was_regenerated = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='ai_generation_feedback')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'generation_history_id': self.generation_history_id,
+            'user_id': self.user_id,
+            'rating': self.rating,
+            'feedback_text': self.feedback_text,
+            'improvement_suggestions': self.improvement_suggestions,
+            'was_regenerated': self.was_regenerated,
             'created_at': self.created_at.isoformat()
         }
