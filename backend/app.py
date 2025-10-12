@@ -127,6 +127,19 @@ def create_app(config_name=None):
     )
     limiter.init_app(app)
     
+    # Register blueprints
+    from routes.user_info import user_info_bp, init_limiter
+    init_limiter(limiter)
+    app.register_blueprint(user_info_bp)
+    
+    from routes.campaigns import campaigns_bp, init_limiter as campaigns_init_limiter
+    campaigns_init_limiter(limiter)
+    app.register_blueprint(campaigns_bp)
+    
+    from routes.ai_generation import ai_generation_bp, init_limiter as ai_init_limiter
+    ai_init_limiter(limiter)
+    app.register_blueprint(ai_generation_bp)
+    
     # Initialize services
     with app.app_context():
         # Create tables
@@ -580,18 +593,18 @@ def create_app(config_name=None):
     @jwt_required()
     @limiter.limit("10 per hour")
     def send_dm():
-        """Send direct message using TwitterAPI.io - supports both username and user_id"""
+        """Send direct message using TwitterAPI.io with enhanced user lookup and validation"""
         try:
             user_id = int(get_jwt_identity())
             data = request.get_json()
             
-            # Validate required fields - accept either recipient_id, recipient_username, or username
+            # Validate required fields - prioritize username over user_id for better UX
             recipient_id = data.get('recipient_id')
             recipient_username = data.get('recipient_username') or data.get('username')
             message = data.get('message')
             
-            if not message:
-                return jsonify({'error': 'message is required'}), 400
+            if not message or not message.strip():
+                return jsonify({'error': 'message is required and cannot be empty'}), 400
                 
             if not recipient_id and not recipient_username:
                 return jsonify({'error': 'Either recipient_id or recipient_username is required'}), 400
@@ -628,40 +641,83 @@ def create_app(config_name=None):
                 logger.error(f"Cookie decryption failed for account {twitter_account.id}: {str(e)}")
                 return jsonify({'error': 'Failed to decrypt login cookie. Please reconnect your account.'}), 400
             
-            # Convert username to user_id if needed using username resolver service
+            # Initialize user info service for enhanced user lookup and validation
+            from services.user_info_service import UserInfoService
+            user_info_service = UserInfoService()
+            
+            recipient_info = None
+            
+            # Convert username to user_id and validate recipient if needed
             if recipient_username and not recipient_id:
                 try:
-                    from services.username_resolver import get_username_resolver, UsernameResolverError
-                    import asyncio
+                    # Clean username
+                    recipient_username = recipient_username.strip().lstrip('@')
                     
-                    # Use username resolver service with caching
-                    resolver = get_username_resolver()
+                    # Validate DM recipient using enhanced service
+                    validation_result = user_info_service.validate_dm_recipient(
+                        username=recipient_username,
+                        twitter_account_id=twitter_account.id
+                    )
                     
-                    # Run async function in sync context
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
+                    if not validation_result['success']:
+                        return jsonify({
+                            'error': f'Failed to validate recipient @{recipient_username}',
+                            'details': validation_result.get('error', 'Validation failed'),
+                            'error_code': 'RECIPIENT_VALIDATION_FAILED',
+                            'username': recipient_username
+                        }), 400
                     
-                    user_resolution = loop.run_until_complete(resolver.resolve_username(recipient_username))
+                    if not validation_result['can_dm']:
+                        validation_details = validation_result.get('validation_details', {})
+                        reason = validation_details.get('reason', 'Cannot send DM to this user')
+                        
+                        return jsonify({
+                            'error': f'Cannot send DM to @{recipient_username}',
+                            'reason': reason,
+                            'error_code': 'DM_NOT_ALLOWED',
+                            'username': recipient_username,
+                            'validation': validation_details
+                        }), 403
                     
-                    if not user_resolution.exists:
-                        return jsonify({'error': f'User @{recipient_username} not found'}), 400
+                    # Get user info and ID
+                    recipient_info = validation_result['user_info']
+                    recipient_id = recipient_info['user_id']
                     
-                    recipient_id = user_resolution.user_id
-                    logger.info(f"Resolved username @{recipient_username} to user_id {recipient_id} (cached: {user_resolution.cached_at is not None})")
+                    logger.info(f"Validated DM recipient @{recipient_username} -> {recipient_id}")
                     
-                except UsernameResolverError as e:
-                    logger.error(f"Username resolution failed for @{recipient_username}: {e.message}")
-                    return jsonify({
-                        'error': e.message,
-                        'error_code': e.error_code,
-                        'username': e.username
-                    }), 400
                 except Exception as e:
-                    logger.error(f"Unexpected error resolving username @{recipient_username}: {str(e)}")
-                    return jsonify({'error': f'Failed to resolve username @{recipient_username}'}), 500
+                    logger.error(f"Recipient validation failed for @{recipient_username}: {str(e)}")
+                    return jsonify({
+                        'error': f'Failed to validate recipient @{recipient_username}',
+                        'details': str(e),
+                        'error_code': 'VALIDATION_ERROR',
+                        'username': recipient_username
+                    }), 400
+            
+            elif recipient_id and not recipient_info:
+                # If only recipient_id provided, try to get user info for response
+                try:
+                    # Try to get cached user info by ID (this might not work if we only have ID)
+                    # For now, we'll proceed without additional info
+                    pass
+                except Exception:
+                    # Not critical, continue without recipient info
+                    pass
+            
+            # Log DM attempt for analytics
+            from services.dm_analytics_service import DMAnalyticsService
+            analytics_service = DMAnalyticsService()
+            
+            dm_log_id = None
+            try:
+                dm_log_id = analytics_service.log_dm_attempt(
+                    campaign_id=data.get('campaign_id'),  # Optional campaign association
+                    target_username=recipient_username or f"user_{recipient_id}",
+                    message_content=message,
+                    twitter_account_id=twitter_account.id
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log DM attempt: {str(e)}")
             
             # Send DM using TwitterAPI.io SDK
             try:
@@ -673,19 +729,99 @@ def create_app(config_name=None):
                     reply_to_message_id=data.get('reply_to_message_id')
                 )
                 
-                return jsonify({
+                # Update analytics with successful result
+                if dm_log_id:
+                    try:
+                        analytics_service.update_dm_result(
+                            dm_id=dm_log_id,
+                            success=True,
+                            twitter_message_id=result.message_id,
+                            response_time_ms=getattr(result, 'response_time_ms', None)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to update DM analytics: {str(e)}")
+                
+                # Prepare response with recipient information
+                response_data = {
+                    'success': True,
                     'message': 'Direct message sent successfully',
-                    'message_id': result.message_id,
-                    'status': result.status
-                })
+                    'dm_info': {
+                        'message_id': result.message_id,
+                        'status': result.status,
+                        'sent_at': datetime.utcnow().isoformat()
+                    }
+                }
+                
+                # Include recipient information if available
+                if recipient_info:
+                    response_data['recipient'] = {
+                        'username': recipient_info['username'],
+                        'display_name': recipient_info['display_name'],
+                        'user_id': recipient_info['user_id'],
+                        'verified': recipient_info.get('verified', False),
+                        'profile_picture_url': recipient_info.get('profile_picture_url')
+                    }
+                elif recipient_username:
+                    response_data['recipient'] = {
+                        'username': recipient_username,
+                        'user_id': recipient_id
+                    }
+                
+                return jsonify(response_data), 200
                 
             except TwitterAPIError as e:
+                # Update analytics with failed result
+                if dm_log_id:
+                    try:
+                        analytics_service.update_dm_result(
+                            dm_id=dm_log_id,
+                            success=False,
+                            error_message=str(e)
+                        )
+                    except Exception as analytics_error:
+                        logger.warning(f"Failed to update DM analytics: {str(analytics_error)}")
+                
                 logger.error(f"DM send failed: {str(e)}")
-                return jsonify({'error': f'Failed to send DM: {str(e)}'}), 400
+                
+                # Provide specific error messages based on error type
+                error_message = str(e)
+                if 'rate limit' in error_message.lower():
+                    return jsonify({
+                        'error': 'Rate limit exceeded for DM sending',
+                        'error_code': 'RATE_LIMITED',
+                        'details': 'Please wait before sending more messages'
+                    }), 429
+                elif 'not allowed' in error_message.lower() or 'cannot send' in error_message.lower():
+                    return jsonify({
+                        'error': 'Cannot send DM to this user',
+                        'error_code': 'DM_NOT_ALLOWED',
+                        'details': error_message
+                    }), 403
+                else:
+                    return jsonify({
+                        'error': 'Failed to send direct message',
+                        'error_code': 'SEND_FAILED',
+                        'details': error_message
+                    }), 400
                 
         except Exception as e:
+            # Update analytics with failed result if we have a log ID
+            if 'dm_log_id' in locals() and dm_log_id:
+                try:
+                    analytics_service.update_dm_result(
+                        dm_id=dm_log_id,
+                        success=False,
+                        error_message=str(e)
+                    )
+                except Exception:
+                    pass  # Don't fail the main request if analytics update fails
+            
             logger.error(f"Send DM error: {str(e)}")
-            return jsonify({'error': 'Failed to send direct message'}), 500
+            return jsonify({
+                'error': 'Failed to send direct message',
+                'error_code': 'INTERNAL_ERROR',
+                'details': 'An unexpected error occurred'
+            }), 500
     
     @app.route('/api/twitter/create-tweet', methods=['POST'])
     @jwt_required()
