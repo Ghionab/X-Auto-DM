@@ -3,73 +3,55 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
-}
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-  }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
+  /* Dark Palette (CRITICAL: These are the ONLY backgrounds) */
+  --bg-page: #111827;       /* Tailwind gray-900 (For main page background) */
+  --bg-card: #1F2937;       /* Tailwind gray-800 (For cards, sidebars, navs) */
+  --border-subtle: #374151; /* Tailwind gray-700 (For borders, dividers) */
+  
+  /* Text Palette (CRITICAL: Main text is light gray/white) */
+  --text-primary: #F3F4F6;   /* Tailwind gray-100 (Headings, primary text) */
+  --text-secondary: #9CA3AF; /* Tailwind gray-400 (Subtitles, labels, disabled) */
+  --text-inverted: #111827;  /* Tailwind gray-900 (For text on gold/green buttons) */
+  
+  /* Accent Palette (Gold) - For primary actions */
+  --accent-gold-primary: #F59E0B;  /* Tailwind amber-500 (Primary buttons, CTAs) */
+  --accent-gold-secondary: #FBBF24; /* Tailwind amber-400 (Active links, icons, highlights) */
+  --accent-gold-hover: #D97706;    /* Tailwind amber-600 (Hover for primary buttons) */
+  
+  /* Accent Palette (Green) - For positive status / secondary actions */
+  --accent-green-primary: #10B981;  /* Tailwind emerald-500 */
+  --accent-green-secondary: #34D399; /* Tailwind emerald-400 */
+  --accent-green-hover: #059669;   /* Tailwind emerald-600 */
+  
+  /* Status Colors (Keep for clarity) */
+  --status-red: #EF4444; /* For "Disconnect" or errors */
+  
+  /* Shadcn compatibility */
+  --background: 222 47% 11%;
+  --foreground: 244 6% 95%;
+  --card: 217 33% 17%;
+  --card-foreground: 244 6% 95%;
+  --popover: 217 33% 17%;
+  --popover-foreground: 244 6% 95%;
+  --primary: 43 96% 56%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 220 13% 26%;
+  --secondary-foreground: 244 6% 95%;
+  --muted: 220 13% 26%;
+  --muted-foreground: 220 9% 61%;
+  --accent: 43 96% 56%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 244 6% 95%;
+  --border: 220 13% 26%;
+  --input: 220 13% 26%;
+  --ring: 43 96% 56%;
+  --chart-1: 43 96% 56%;
+  --chart-2: 158 64% 52%;
+  --chart-3: 217 91% 60%;
+  --chart-4: 271 91% 65%;
+  --chart-5: 0 84% 60%;
+  --radius: 0.5rem;
 }
 
 @layer base {
@@ -77,6 +59,70 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-[var(--bg-page)] text-[var(--text-primary)];
+    font-family: 'Inter', sans-serif;
+  }
+  
+  button, a {
+    transition: all 0.2s ease-in-out;
+  }
+}
+
+@layer components {
+  /* === BUTTONS === */
+  .btn-primary-gold {
+    @apply bg-[var(--accent-gold-primary)] text-[var(--text-inverted)] font-semibold py-2 px-4 rounded-lg shadow-md;
+    @apply hover:bg-[var(--accent-gold-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold-secondary)] focus:ring-opacity-75;
+  }
+  
+  .btn-secondary-gold {
+    @apply bg-transparent text-[var(--accent-gold-secondary)] font-semibold py-2 px-4 rounded-lg border border-[var(--accent-gold-secondary)];
+    @apply hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[var(--accent-gold-secondary)] focus:ring-opacity-75;
+  }
+  
+  .btn-secondary-gray {
+    @apply bg-transparent text-[var(--text-secondary)] font-semibold py-2 px-4 rounded-lg border border-[var(--border-subtle)];
+    @apply hover:bg-white/10 hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-white/10;
+  }
+  
+  .btn-secondary-danger {
+    @apply bg-transparent text-[var(--status-red)] font-semibold py-2 px-4 rounded-lg border border-[var(--status-red)];
+    @apply hover:bg-red-500/10 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75;
+  }
+  
+  .btn-tertiary {
+    @apply bg-transparent text-[var(--text-secondary)] font-medium py-2 px-4 rounded-lg;
+    @apply hover:bg-white/10 hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-white/10;
+  }
+  
+  /* === BADGES === */
+  .badge-pill-green {
+    @apply inline-flex items-center rounded-full bg-[var(--accent-green-primary)] bg-opacity-10 px-2 py-0.5 text-xs font-medium text-[var(--accent-green-secondary)];
+  }
+  
+  .badge-pill-gold {
+    @apply inline-flex items-center rounded-full bg-[var(--accent-gold-primary)] bg-opacity-10 px-2 py-0.5 text-xs font-medium text-[var(--accent-gold-secondary)];
+  }
+  
+  /* === FORMS (CRITICAL) === */
+  .form-input {
+    @apply w-full bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-primary)] rounded-lg;
+    @apply focus:border-[var(--accent-gold-secondary)] focus:ring-[var(--accent-gold-secondary)] focus:ring-opacity-50;
+    @apply placeholder:text-[var(--text-secondary)] placeholder:opacity-50;
+  }
+  
+  /* Ensure selects are also styled */
+  select.form-input {
+    @apply appearance-none;
+  }
+  
+  /* === PILL TOGGLE (for Plans Page) === */
+  .pill-toggle-active {
+    @apply bg-[var(--accent-gold-primary)] text-[var(--text-inverted)] rounded-full px-4 py-1.5 text-sm font-semibold shadow-sm;
+  }
+  
+  .pill-toggle-inactive {
+    @apply bg-transparent text-[var(--text-secondary)] rounded-full px-4 py-1.5 text-sm font-semibold;
+    @apply hover:text-[var(--text-primary)];
   }
 }
