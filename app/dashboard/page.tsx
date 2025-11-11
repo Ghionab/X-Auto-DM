@@ -81,7 +81,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-[var(--bg-page)]">
         <Sidebar />
         <div className="flex-1 lg:ml-64">
           <Header 
@@ -90,8 +90,8 @@ export default function Dashboard() {
           />
           <div className="flex items-center justify-center h-96">
             <div className="text-center">
-              <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
-              <p className="text-gray-600">Loading dashboard data...</p>
+              <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-[var(--accent-gold-primary)]" />
+              <p className="text-[var(--text-secondary)]">Loading dashboard data...</p>
             </div>
           </div>
         </div>
@@ -102,7 +102,7 @@ export default function Dashboard() {
   const overview = dashboardData?.overview || {};
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-[var(--bg-page)]">
       <Sidebar />
       
       <div className="flex-1 lg:ml-64">
@@ -142,18 +142,33 @@ export default function Dashboard() {
 
           {/* Main Content Tabs */}
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="campaigns">New Campaign</TabsTrigger>
-              <TabsTrigger value="accounts">Accounts</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 bg-[var(--bg-card)] border border-[var(--border-subtle)]">
+              <TabsTrigger 
+                value="overview"
+                className="data-[state=active]:bg-[var(--bg-page)] data-[state=active]:text-[var(--accent-gold-secondary)] data-[state=active]:border-b-2 data-[state=active]:border-[var(--accent-gold-secondary)] text-[var(--text-secondary)]"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger 
+                value="campaigns"
+                className="data-[state=active]:bg-[var(--bg-page)] data-[state=active]:text-[var(--accent-gold-secondary)] data-[state=active]:border-b-2 data-[state=active]:border-[var(--accent-gold-secondary)] text-[var(--text-secondary)]"
+              >
+                New Campaign
+              </TabsTrigger>
+              <TabsTrigger 
+                value="accounts"
+                className="data-[state=active]:bg-[var(--bg-page)] data-[state=active]:text-[var(--accent-gold-secondary)] data-[state=active]:border-b-2 data-[state=active]:border-[var(--accent-gold-secondary)] text-[var(--text-secondary)]"
+              >
+                Accounts
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
               {/* Recent Activity */}
-              <Card className="border-0 shadow-lg">
+              <Card className="bg-[var(--bg-card)] border border-[var(--border-subtle)]">
                 <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Latest DM campaign results and interactions</CardDescription>
+                  <CardTitle className="text-[var(--text-primary)]">Recent Activity</CardTitle>
+                  <CardDescription className="text-[var(--text-secondary)]">Latest DM campaign results and interactions</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -164,27 +179,27 @@ export default function Dashboard() {
                         const status = campaign.status;
                         
                         return (
-                          <div key={campaign.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div key={campaign.id} className="flex items-center justify-between p-3 bg-[var(--bg-page)] rounded-lg border border-[var(--border-subtle)]">
                             <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                              <div className="w-8 h-8 bg-[var(--accent-gold-primary)] rounded-full flex items-center justify-center text-[var(--text-inverted)] text-sm font-medium">
                                 {campaign.name.charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <div className="font-medium">{campaign.name}</div>
-                                <div className="text-sm text-gray-600">
+                                <div className="font-medium text-[var(--text-primary)]">{campaign.name}</div>
+                                <div className="text-sm text-[var(--text-secondary)]">
                                   {campaign.messages_sent} sent • {campaign.replies_received} replies
                                 </div>
                               </div>
                             </div>
                             <div className="text-right">
-                              <Badge variant={
-                                status === 'active' ? 'default' : 
-                                status === 'paused' ? 'secondary' : 
-                                'outline'
+                              <Badge className={
+                                status === 'active' ? 'badge-pill-green' : 
+                                status === 'paused' ? 'badge-pill-gold' : 
+                                'bg-[var(--border-subtle)] text-[var(--text-secondary)]'
                               }>
                                 {status}
                               </Badge>
-                              <div className="text-xs text-gray-500 mt-1">{replyRate}% reply rate</div>
+                              <div className="text-xs text-[var(--text-secondary)] mt-1">{replyRate}% reply rate</div>
                             </div>
                           </div>
                         );
@@ -209,15 +224,15 @@ export default function Dashboard() {
               </Card>
 
               {/* Performance Chart Placeholder */}
-              <Card className="border-0 shadow-lg">
+              <Card className="bg-[var(--bg-card)] border border-[var(--border-subtle)]">
                 <CardHeader>
-                  <CardTitle>Performance Trends</CardTitle>
-                  <CardDescription>DM performance over the last 30 days</CardDescription>
+                  <CardTitle className="text-[var(--text-primary)]">Performance Trends</CardTitle>
+                  <CardDescription className="text-[var(--text-secondary)]">DM performance over the last 30 days</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {dashboardData?.chart_data?.campaign_performance?.length > 0 ? (
-                    <div className="h-64 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg flex items-center justify-center">
-                      <div className="text-center text-gray-500">
+                    <div className="h-64 bg-[var(--bg-page)] rounded-lg flex items-center justify-center border border-[var(--border-subtle)]">
+                      <div className="text-center text-[var(--text-secondary)]">
                         <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-50" />
                         <p>Performance chart will be displayed here</p>
                       </div>
@@ -238,13 +253,13 @@ export default function Dashboard() {
             </TabsContent>
 
             <TabsContent value="accounts">
-              <Card className="border-0 shadow-lg">
+              <Card className="bg-[var(--bg-card)] border border-[var(--border-subtle)]">
                 <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Twitter className="w-5 h-5 text-blue-600" />
+                  <CardTitle className="flex items-center space-x-2 text-[var(--text-primary)]">
+                    <Twitter className="w-5 h-5 text-[var(--accent-gold-secondary)]" />
                     <span>Connected X Accounts</span>
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-[var(--text-secondary)]">
                     Manage your connected Twitter/X accounts for DM campaigns
                   </CardDescription>
                 </CardHeader>
