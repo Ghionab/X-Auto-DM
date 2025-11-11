@@ -149,37 +149,37 @@ export default function Register() {
   const passwordStrength = getPasswordStrength(formData.password);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--bg-page)]">
       <div className="w-full max-w-md space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <Link href="/" className="inline-flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-8 transition-colors">
+          <Link href="/" className="inline-flex items-center space-x-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-8 transition-colors">
             <ArrowLeft className="w-4 h-4" />
             <span>Back to home</span>
           </Link>
           <div className="flex items-center justify-center space-x-2 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <MessageCircle className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 bg-[var(--accent-gold-primary)] rounded-lg flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-[var(--text-inverted)]" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold text-[var(--text-primary)]">
               XReacher
             </span>
           </div>
-          <p className="text-gray-600">Create your account to get started.</p>
+          <p className="text-[var(--text-secondary)]">Create your account to get started.</p>
         </div>
 
         {/* Registration Card */}
-        <Card className="border-0 shadow-xl">
+        <Card className="bg-[var(--bg-card)] border border-[var(--border-subtle)]">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-2xl font-bold text-center">Create Account</CardTitle>
-            <CardDescription className="text-center">
+            <CardTitle className="text-2xl font-bold text-center text-[var(--text-primary)]">Create Account</CardTitle>
+            <CardDescription className="text-center text-[var(--text-secondary)]">
               Enter your details to create your XReacher account
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleRegister} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username" className="text-[var(--text-secondary)]">Username</Label>
                 <Input
                   id="username"
                   type="text"
@@ -187,7 +187,7 @@ export default function Register() {
                   value={formData.username}
                   onChange={(e) => handleInputChange('username', e.target.value)}
                   required
-                  className={`h-12 ${errors.username ? 'border-red-500' : ''}`}
+                  className={`h-12 form-input ${errors.username ? 'border-red-500' : ''}`}
                 />
                 {errors.username && (
                   <p className="text-sm text-red-600">{errors.username}</p>
@@ -195,7 +195,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-[var(--text-secondary)]">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -203,7 +203,7 @@ export default function Register() {
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   required
-                  className={`h-12 ${errors.email ? 'border-red-500' : ''}`}
+                  className={`h-12 form-input ${errors.email ? 'border-red-500' : ''}`}
                 />
                 {errors.email && (
                   <p className="text-sm text-red-600">{errors.email}</p>
@@ -211,7 +211,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-[var(--text-secondary)]">Password</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -220,12 +220,12 @@ export default function Register() {
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
                     required
-                    className={`h-12 pr-10 ${errors.password ? 'border-red-500' : ''}`}
+                    className={`h-12 pr-10 form-input ${errors.password ? 'border-red-500' : ''}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -241,7 +241,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-[var(--text-secondary)]">Confirm Password</Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
@@ -250,12 +250,12 @@ export default function Register() {
                     value={formData.confirmPassword}
                     onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
                     required
-                    className={`h-12 pr-10 ${errors.confirmPassword ? 'border-red-500' : ''}`}
+                    className={`h-12 pr-10 form-input ${errors.confirmPassword ? 'border-red-500' : ''}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -267,16 +267,16 @@ export default function Register() {
 
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full h-12 btn-primary-gold"
                 disabled={isLoading}
               >
                 {isLoading ? 'Creating Account...' : 'Create Account'}
               </Button>
             </form>
             
-            <div className="mt-6 text-center text-sm text-gray-600">
+            <div className="mt-6 text-center text-sm text-[var(--text-secondary)]">
               Already have an account?{' '}
-              <Link href="/login" className="text-blue-600 hover:underline font-medium">
+              <Link href="/login" className="text-[var(--accent-gold-secondary)] hover:underline font-medium">
                 Sign in here
               </Link>
             </div>
