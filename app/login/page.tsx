@@ -63,37 +63,37 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--bg-page)]">
       <div className="w-full max-w-md space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <Link href="/" className="inline-flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-8 transition-colors">
+          <Link href="/" className="inline-flex items-center space-x-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-8 transition-colors">
             <ArrowLeft className="w-4 h-4" />
             <span>Back to home</span>
           </Link>
           <div className="flex items-center justify-center space-x-2 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <MessageCircle className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 bg-[var(--accent-gold-primary)] rounded-lg flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-[var(--text-inverted)]" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold text-[var(--text-primary)]">
               XReacher
             </span>
           </div>
-          <p className="text-gray-600">Welcome back! Sign in to your account.</p>
+          <p className="text-[var(--text-secondary)]">Welcome back! Sign in to your account.</p>
         </div>
 
         {/* Login Card */}
-        <Card className="border-0 shadow-xl">
+        <Card className="bg-[var(--bg-card)] border border-[var(--border-subtle)]">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
-            <CardDescription className="text-center">
+            <CardTitle className="text-2xl font-bold text-center text-[var(--text-primary)]">Sign In</CardTitle>
+            <CardDescription className="text-center text-[var(--text-secondary)]">
               Enter your email and password to access your dashboard
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-[var(--text-secondary)]">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -101,11 +101,11 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="h-12"
+                  className="h-12 form-input"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-[var(--text-secondary)]">Password</Label>
                 <Input
                   id="password"
                   type="password"
@@ -113,30 +113,30 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-12"
+                  className="h-12 form-input"
                 />
               </div>
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input type="checkbox" className="rounded" />
-                  <span className="text-gray-600">Remember me</span>
+                  <span className="text-[var(--text-secondary)]">Remember me</span>
                 </label>
-                <a href="#" className="text-blue-600 hover:underline">
+                <a href="#" className="text-[var(--accent-gold-secondary)] hover:underline">
                   Forgot password?
                 </a>
               </div>
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full h-12 btn-primary-gold"
                 disabled={isLoading}
               >
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
             
-            <div className="mt-6 text-center text-sm text-gray-600">
+            <div className="mt-6 text-center text-sm text-[var(--text-secondary)]">
               Don't have an account?{' '}
-              <Link href="/register" className="text-blue-600 hover:underline font-medium">
+              <Link href="/register" className="text-[var(--accent-gold-secondary)] hover:underline font-medium">
                 Sign up for free
               </Link>
             </div>

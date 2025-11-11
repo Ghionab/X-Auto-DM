@@ -51,7 +51,7 @@ export default function DMPage() {
   const connectedAccounts = accounts.filter(account => account.connection_status === 'connected');
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-[var(--bg-page)]">
       <Sidebar />
       
       <div className="flex-1 lg:ml-64">
@@ -64,23 +64,23 @@ export default function DMPage() {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-2 text-gray-600">Loading accounts...</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--accent-gold-primary)] mx-auto"></div>
+                <p className="mt-2 text-[var(--text-secondary)]">Loading accounts...</p>
               </div>
             </div>
           ) : connectedAccounts.length === 0 ? (
-            <Card className="border-0 shadow-lg">
+            <Card className="bg-[var(--bg-card)] border border-[var(--border-subtle)]">
               <CardContent className="p-8 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MessageCircle className="w-8 h-8 text-gray-400" />
+                <div className="w-16 h-16 bg-[var(--border-subtle)] rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MessageCircle className="w-8 h-8 text-[var(--accent-gold-secondary)]" />
                 </div>
-                <h3 className="font-bold text-lg text-gray-900 mb-2">No Connected Accounts</h3>
-                <p className="text-gray-600 mb-6">
+                <h3 className="font-bold text-lg text-[var(--text-primary)] mb-2">No Connected Accounts</h3>
+                <p className="text-[var(--text-secondary)] mb-6">
                   You need to connect at least one X account before sending DMs.
                 </p>
                 <ConnectXAccountButton 
                   onSuccess={handleAccountConnected}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                  className="btn-primary-gold"
                 />
               </CardContent>
             </Card>
